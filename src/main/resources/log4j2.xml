@@ -18,7 +18,7 @@
     <Root level="DEBUG">
       <AppenderRef ref="Console"/>
     </Root>
-    <Logger name="com.keedio.out" level="TRACE" additivity="false">
+    <Logger name="com.keedio.out" level="WARN" additivity="false">
       <appender-ref ref="file-log" level="TRACE"/>
     </Logger>
   </Loggers>

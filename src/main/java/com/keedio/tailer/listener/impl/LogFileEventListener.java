@@ -1,6 +1,6 @@
-package com.keedio.listener.impl;
+package com.keedio.tailer.listener.impl;
 
-import com.keedio.listener.FileEventListener;
+import com.keedio.tailer.listener.FileEventListener;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -11,7 +11,7 @@ public class LogFileEventListener implements FileEventListener {
     private final static Logger LOGGER = LogManager.getLogger(LogFileEventListener.class);
 
     @Override
-    public String rotated(long lastPosition) {
+    public String rotated(long lastPosition, long currPosition) {
         LOGGER.info("File Rotated");
 
         return null;
