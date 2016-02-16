@@ -14,15 +14,15 @@ import java.nio.file.attribute.BasicFileAttributes;
 /**
  * <p>
  *     Tails a single file for changes, and notifies changes to an external listener
- *     {@see com.keedio.tailer.listener.FileEventListener}.
+ *     {@link com.keedio.tailer.listener.FileEventListener}.
  * </p>
  * <p>
- *     This component tries to read full lines using a {@see java.io.BufferedReader#readLine()}. The line read can either
+ *     This component tries to read full lines using a {@link java.io.BufferedReader#readLine()}. The line read can either
  *     be complete or partial (if the file generator is especially slow, for example).
  *
- *     This tailer maintains a buffer where the returning values of successive calls to {@see java.io.BufferedReader#readLine()}
+ *     This tailer maintains a buffer where the returning values of successive calls to {@link java.io.BufferedReader#readLine()}
  *     are accumulated. At each iteration we validate if the buffer contains valid line.
- *     Line validation logic is delegated to {@see com.keedio.tailer.listener.FileEventListener#isValid}.
+ *     Line validation logic is delegated to {@link com.keedio.tailer.listener.FileEventListener#isValid}.
  * </p>
  * <p>
  *     This component supports file rotation. This tailer keeps track of the last character read from the originally tailed file.
@@ -35,8 +35,8 @@ import java.nio.file.attribute.BasicFileAttributes;
  *
  * Created by luca on 13/2/16.
  */
-public class Tailer implements Runnable {
-    private final static Logger LOGGER = LogManager.getLogger(Tailer.class);
+public class LRTailer implements Runnable {
+    private final static Logger LOGGER = LogManager.getLogger(LRTailer.class);
 
     /* the listener that will be notified of events ocurring on the tailed file */
     private FileEventListener listener;
@@ -45,7 +45,7 @@ public class Tailer implements Runnable {
     private long sleepTime;
 
     /* the name of the file to tail */
-    private String filename;
+    private File file;
 
     /* the current offset (next read char will be position + 1 */
     private long position = 0;
@@ -56,6 +56,8 @@ public class Tailer implements Runnable {
     /* timestamp of the time of creation of the tailed file. Helps in detecting file rotation */
     private long creationTime;
 
+    private boolean run = true;
+
     /**
      * Builds a new tailer.
      *
@@ -63,10 +65,18 @@ public class Tailer implements Runnable {
      * @param sleepTime the sleep time, in milliseconds, between line reads.
      * @param filename the name of the file to tail.
      */
-    public Tailer(FileEventListener listener, long sleepTime, String filename) {
+    public LRTailer(FileEventListener listener, long sleepTime, String filename) {
         this.listener = listener;
         this.sleepTime = sleepTime;
-        this.filename = filename;
+        this.file = new File(filename);
+        this.listener.init(this);
+    }
+
+    /**
+     * Stops tailing.
+     */
+    public void stop(){
+        run = false;
     }
 
     /**
@@ -75,20 +85,14 @@ public class Tailer implements Runnable {
     @Override
     public void run() {
 
-        if (listener == null) {
-            throw new TailerException(new IllegalStateException("Listener cannot be null"));
-        }
-
-        File file = new File(filename);
-
         if (!file.exists()) {
             listener.notExists();
-            throw new TailerException(new FileNotFoundException(filename + " does not exists"));
+            throw new TailerException(new FileNotFoundException(file.getAbsolutePath() + " does not exists"));
         }
 
         boolean reopen = true;
 
-        while (reopen){
+        while (reopen && run){
             reopen = handleFile(file);
 
             sleepSilently(sleepTime);
@@ -138,7 +142,7 @@ public class Tailer implements Runnable {
             while ((currentLine = reader.readLine()) != null) {
                 buffer.append(currentLine);
                 if (listener.isValid(buffer.toString())){
-                    listener.handle(currentLine);
+                    listener.handle(rotatedFileName, currentLine);
 
                     buffer = new StringBuffer();
                 }
@@ -152,7 +156,7 @@ public class Tailer implements Runnable {
      * Opens the file and starts tailing it. It keeps accumulating partial lines to a buffer
      * until the buffer contains a valid line.
      *
-     * Line validation logic is delegated to {@see com.keedio.tailer.listener.FileEventListener#isValid}.
+     * Line validation logic is delegated to {@link com.keedio.tailer.listener.FileEventListener#isValid}.
      *
      * @param file the file to tail.
      * @return true if something strange has happened to the tailed file and it should be re-opened.
@@ -164,7 +168,7 @@ public class Tailer implements Runnable {
             creationTime = getCreationTime(file);
 
             StringBuffer buffer = new StringBuffer();
-            while (true) {
+            while (run) {
 
                 try {
 
@@ -181,8 +185,10 @@ public class Tailer implements Runnable {
                         // update position taking into account carriage return
                         position += currentLine.length() + 1;
 
-                        if (listener.isValid(buffer.toString())) {
-                            listener.handle(currentLine);
+                        String accumulated = buffer.toString();
+
+                        if (listener.isValid(accumulated)) {
+                            listener.handle(file.getAbsolutePath(), accumulated);
 
                             lastFullLinePosition = position;
                             buffer = new StringBuffer();
@@ -205,6 +211,8 @@ public class Tailer implements Runnable {
             listener.handleException(e);
             throw new TailerException(e);
         }
+
+        return false;
     }
 
     /**
@@ -280,5 +288,13 @@ public class Tailer implements Runnable {
         } catch (InterruptedException e) {
             LOGGER.error(e);
         }
+    }
+
+    /**
+     * Returns the name of file being tailed.
+     * @return the name of file being tailed.
+     */
+    public File getTailedFile(){
+        return file;
     }
 }

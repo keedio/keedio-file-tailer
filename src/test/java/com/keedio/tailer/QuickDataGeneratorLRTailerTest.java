@@ -9,11 +9,12 @@ import org.apache.logging.log4j.Logger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.internal.matchers.Null;
 
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
-import java.io.Writer;
 import java.util.concurrent.*;
 import java.util.regex.Pattern;
 
@@ -25,8 +26,8 @@ import static org.mockito.Mockito.*;
 /**
  * Created by luca on 13/2/16.
  */
-public class SlowDataGeneratorTailerTest {
-    private final static Logger LOGGER = LogManager.getLogger(SlowDataGeneratorTailerTest.class);
+public class QuickDataGeneratorLRTailerTest {
+    private final static Logger LOGGER = LogManager.getLogger(QuickDataGeneratorLRTailerTest.class);
     private static File logFile;
     private File logDir;
 
@@ -50,16 +51,16 @@ public class SlowDataGeneratorTailerTest {
     public void testInexistentFile() {
         FileEventListener mockListener = mock(FileEventListener.class);
 
-        Tailer tailer = new Tailer(mockListener, 1000, "/tmp/garbage");
+        LRTailer tailer = new LRTailer(mockListener, 1000, "/tmp/garbage");
 
         Future<?> future = service.submit(tailer);
 
         try {
             future.get();
 
-            fail("Tailer should not have finished successfully");
+            fail("LRTailer should not have finished successfully");
         } catch (InterruptedException e) {
-            fail("Tailer should not have been interrupted");
+            fail("LRTailer should not have been interrupted");
         } catch (ExecutionException e) {
             verify(mockListener, times(1)).notExists();
             verify(mockListener, never()).rotated(anyLong(), anyLong());
@@ -68,41 +69,25 @@ public class SlowDataGeneratorTailerTest {
         }
     }
 
-    @Test
+    @Test(expected = NullPointerException.class)
     public void testNullListener() {
-
-        Tailer tailer = new Tailer(null, 1000, "/tmp/garbage");
-
-        Future<?> future = service.submit(tailer);
-
-        try {
-            future.get();
-
-            fail("Tailer should not have finished successfully");
-        } catch (InterruptedException e) {
-            fail("Tailer should not have been interrupted");
-        } catch (ExecutionException e) {
-            assertTrue(e.getCause() instanceof TailerException);
-            assertTrue(e.getCause().getCause() instanceof IllegalStateException);
-
-        }
-
+        new LRTailer(null, 1000, "/tmp/garbage");
     }
 
     @Test
     public void testFailureOnDir() {
         FileEventListener mockListener = mock(FileEventListener.class);
 
-        Tailer tailer = new Tailer(mockListener, 1000, "/tmp");
+        LRTailer tailer = new LRTailer(mockListener, 1000, "/tmp");
 
         Future<?> future = service.submit(tailer);
 
         try {
             future.get();
 
-            fail("Tailer should not have finished successfully");
+            fail("LRTailer should not have finished successfully");
         } catch (InterruptedException e) {
-            fail("Tailer should not have been interrupted");
+            fail("LRTailer should not have been interrupted");
         } catch (ExecutionException e) {
             verify(mockListener, times(1)).handleException(any(Exception.class));
             verify(mockListener, never()).rotated(anyLong(), anyLong());
@@ -117,7 +102,7 @@ public class SlowDataGeneratorTailerTest {
         FileEventListener mockListener = mock(FileEventListener.class);
         when(mockListener.isValid(anyString())).thenReturn(Boolean.FALSE);
 
-        Tailer tailer = new Tailer(mockListener, 1000, logFile.getAbsolutePath());
+        LRTailer tailer = new LRTailer(mockListener, 1000, logFile.getAbsolutePath());
 
         String data = "[TRACE] 2016-02-09 16:41:09.873 " +
                 "[pool-3-thread-1] out - \nAccountTransaction(1455032469864," +
@@ -126,19 +111,19 @@ public class SlowDataGeneratorTailerTest {
 
         Future<?> dgFuture = service.submit(new DataGenerator(data, 1,100));
 
-        Tailer.sleepSilently(500);
+        LRTailer.sleepSilently(500);
 
         Future<?> future = service.submit(tailer);
 
         try {
             future.get(2, TimeUnit.SECONDS);
-            fail("Tailer should not have finished");
+            fail("LRTailer should not have finished");
         } catch (InterruptedException e) {
-            fail("Tailer should not have been interrupted");
+            fail("LRTailer should not have been interrupted");
         } catch (ExecutionException e) {
-            fail("Tailer should not throw any exception");
+            fail("LRTailer should not throw any exception");
         } catch (TimeoutException e) {
-            verify(mockListener, never()).handle(anyString());
+            verify(mockListener, never()).handle(anyString(), anyString());
             verify(mockListener, never()).rotated(anyLong(), anyLong());
         }
     }
@@ -153,7 +138,7 @@ public class SlowDataGeneratorTailerTest {
             boolean res = pattern.matcher(partialLine).matches();
 
             if (res){
-                LOGGER.info("Found match on line: " +partialLine);
+                //LOGGER.info("Found match on line: " +partialLine);
             }
 
             return res;
@@ -171,32 +156,32 @@ public class SlowDataGeneratorTailerTest {
                 "bIowQQUwFLBRbbb,329475618292398,2,-1180.0,40861.41,None,0.0)";
 
 
-        Tailer tailer = new Tailer(mockListener, 1000, logFile.getAbsolutePath());
+        LRTailer tailer = new LRTailer(mockListener, 1000, logFile.getAbsolutePath());
 
         Future<?> dgFuture = service.submit(new DataGenerator(data, 1,100));
 
-        Tailer.sleepSilently(500);
+        LRTailer.sleepSilently(500);
 
         Future<?> future = service.submit(tailer);
 
         try {
             future.get(2, TimeUnit.SECONDS);
 
-            fail("Tailer should not have finished");
+            fail("LRTailer should not have finished");
         } catch (InterruptedException e) {
-            fail("Tailer should not have been interrupted");
+            fail("LRTailer should not have been interrupted");
         } catch (ExecutionException e) {
-            fail("Tailer should not throw any exception");
+            fail("LRTailer should not throw any exception");
         } catch (TimeoutException e) {
             verify(mockListener, atLeastOnce()).isValid(anyString());
-            verify(mockListener, atLeastOnce()).handle(anyString());
+            verify(mockListener, atLeastOnce()).handle(anyString(), anyString());
             verify(mockListener, never()).rotated(anyLong(), anyLong());
         }
     }
 
     static class RegexpDegeneratedDataValidatorListener extends LogFileEventListener {
 
-        private static final String regexp = "^\\{.*\\}$";
+        private static final String regexp = "^\\{\"log\":.*\\}$";
         private static final Pattern pattern = Pattern.compile(regexp);
 
         @Override
@@ -204,7 +189,7 @@ public class SlowDataGeneratorTailerTest {
             boolean res = pattern.matcher(partialLine).matches();
 
             if (res){
-                LOGGER.info("Found match on line: " +partialLine);
+                //LOGGER.info("Found match on line: " +partialLine);
             }
 
             return res;
@@ -228,25 +213,25 @@ public class SlowDataGeneratorTailerTest {
                 "\"returnCode\":\"\",\"trace\":\"\",\"appName\":\"bootstrap\",\"serverId\":" +
                 "\"null\"}\",\"stream\":\"stdout\",\"time\":\"2016-02-02T09:53:22.287849201Z\"}";
 
-        Tailer tailer = new Tailer(mockListener, 1000, logFile.getAbsolutePath());
+        LRTailer tailer = new LRTailer(mockListener, 1000, logFile.getAbsolutePath());
 
         Future<?> dgFuture = service.submit(new DataGenerator(data, 1,100));
 
-        Tailer.sleepSilently(1000);
+        LRTailer.sleepSilently(500);
 
         Future<?> future = service.submit(tailer);
 
         try {
-            future.get(3, TimeUnit.SECONDS);
+            future.get(2, TimeUnit.SECONDS);
 
-            fail("Tailer should not have finished");
+            fail("LRTailer should not have finished");
         } catch (InterruptedException e) {
-            fail("Tailer should not have been interrupted");
+            fail("LRTailer should not have been interrupted");
         } catch (ExecutionException e) {
-            fail("Tailer should not throw any exception");
+            fail("LRTailer should not throw any exception");
         } catch (TimeoutException e) {
             verify(mockListener, atLeastOnce()).isValid(anyString());
-            verify(mockListener, atLeastOnce()).handle(anyString());
+            verify(mockListener, atLeastOnce()).handle(anyString(),anyString());
             verify(mockListener, never()).rotated(anyLong(), anyLong());
         }
     }
@@ -257,18 +242,19 @@ public class SlowDataGeneratorTailerTest {
         when(mockListener.isValid(anyString())).thenCallRealMethod();
         when(mockListener.rotated(anyLong(), anyLong())).thenCallRealMethod();
 
+
         String data = "{\"log\":\"2016-02-02 10:53:22.285 [main] " +
                 "INFO  org.springframework.context.supp\rort.DefaultLifecycleProcessor " +
                 "- {\"category\":\"applicationlog\",\"requestId\":\"\",\"timestamp\": " +
                 "2016-02-02 10:53:22.285,\"description\":\"Starting beans in \nphase 0\"," +
                 "\"returnCode\":\"\",\"trace\":\"\",\"appName\":\"bootstrap\",\"serverId\":" +
-                "\"null\"}\",\"stream\":\"stdout\",\"time\":\"2016-02-02T09:53:22.287849201Z\"}";
+                "\"null\"}\",\"stream\":\"stdout\",\"time\":\"2016-02-02T09:53:22.287849201Z\"}\n";
 
-        Tailer tailer = new Tailer(mockListener, 1000, logFile.getAbsolutePath());
+        LRTailer tailer = new LRTailer(mockListener, 1000, logFile.getAbsolutePath());
 
-        Future<?> dgFuture = service.submit(new DataGenerator(data, 1,10));
+        Future<?> dgFuture = service.submit(new DataGenerator(data, 100,10));
 
-        Tailer.sleepSilently(500);
+        LRTailer.sleepSilently(500);
 
         Future<?> future = service.submit(tailer);
 
@@ -276,27 +262,25 @@ public class SlowDataGeneratorTailerTest {
             dgFuture.get();
 
             try {
+                LOGGER.info("Rotating file");
                 logFile.renameTo(new File(logDir, "test.log.1"));
                 logFile = new File(logDir, "test.log");
 
-                dgFuture = service.submit(new DataGenerator(data, 1,10));
-
-                dgFuture.get();
+                service.submit(new DataGenerator(data, 100,10));
 
                 future.get(4, TimeUnit.SECONDS);
 
-                fail("Tailer should not have finished");
+                fail("LRTailer should not have finished");
             } catch (InterruptedException ex) {
-                fail("Tailer should not have been interrupted");
+                fail("LRTailer should not have been interrupted");
             } catch (ExecutionException ex) {
-
                 LOGGER.error("ExecutionException",ex);
-                fail("Tailer should not throw any exception");
+                fail("LRTailer should not throw any exception");
+
 
             } catch (TimeoutException ex) {
-
+                verify(mockListener, times(20)).handle(anyString(),anyString());
                 verify(mockListener, times(1)).rotated(anyLong(), anyLong());
-                verify(mockListener, times(20)).handle(anyString());
             }
         } catch (InterruptedException e) {
             fail("DataGenerator should not have been interrupted");
@@ -324,23 +308,16 @@ public class SlowDataGeneratorTailerTest {
 
             LOGGER.info("Generating log to:\n" + logFile.getAbsolutePath());
 
-            try (Writer w = new FileWriter(logFile)) {
-
+            try (BufferedWriter w = new BufferedWriter(new FileWriter(logFile))) {
                 int k = 0;
                 while (k < maxLines) {
-                    for (int i = 0; i < data.length(); i++) {
 
-                        if (i == 8) {
-                            w.write(k + " ");
-                        }
+                    String realData = data.substring(0, 8) + k + " " + data.substring(8);
 
-                        char c = data.charAt(i);
-                        w.write(c);
-                        w.flush();
-                        Thread.sleep(timeout);
-                    }
-                    w.write("\n");
+                    w.write(realData);
+                    w.flush();
                     k++;
+                    Thread.sleep(timeout);
                 }
             } catch (Exception e) {
                 LOGGER.error(e);
